@@ -1,0 +1,44 @@
+import os
+from dotenv import load_dotenv, set_key
+
+class AgentOrchestrator:
+    def __init__(self, env_path):
+        self.env_path = env_path
+        self.load_keys()
+        
+    def load_keys(self):
+        load_dotenv(self.env_path)
+        self.groq_key = os.getenv("GROQ_API_KEY")
+        self.gemini_key = os.getenv("GEMINI_API_KEY")
+        
+    def has_keys(self):
+        return bool(self.groq_key or self.gemini_key)
+        
+    def save_key(self, provider, key):
+        if not os.path.exists(self.env_path):
+            with open(self.env_path, 'w') as f: f.write("")
+        
+        env_var = "GROQ_API_KEY" if provider.lower() == "groq" else "GEMINI_API_KEY"
+        set_key(self.env_path, env_var, key)
+        self.load_keys()
+        return "Clave guardada y sistema reiniciado. ¡Estoy listo!"
+
+    def process_request(self, message):
+        # Basic command handling for keys
+        if message.startswith("/key groq"):
+            key = message.replace("/key groq", "").strip()
+            return self.save_key("groq", key)
+        if message.startswith("/key gemini"):
+            key = message.replace("/key gemini", "").strip()
+            return self.save_key("gemini", key)
+            
+        if not self.has_keys():
+            return "⚠️ No tengo cerebro (API Keys). Por favor escribe:\n'/key groq TU_CLAVE_AQUI'\no\n'/key gemini TU_CLAVE_AQUI'"
+
+        # Here we will later integrate the REAL LangChain Logic
+        # For now, a mock response to prove connectivity
+        return self._mock_brain_response(message)
+        
+    def _mock_brain_response(self, message):
+        # This is where we will hook up LangChain
+        return f"Recibido: '{message}'. (Sistema en fase Alpha: Conectando neuronas...)"

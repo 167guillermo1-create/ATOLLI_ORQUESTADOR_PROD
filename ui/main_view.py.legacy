@@ -1,0 +1,99 @@
+import flet as ft
+from brain.agent_logic import AgentOrchestrator
+
+class MainView(ft.Container):
+    def __init__(self, page: ft.Page, agent: AgentOrchestrator):
+        super().__init__()
+        self.page = page
+        self.agent = agent
+        self.expand = True
+        
+        # UI Elements
+        self.chat_history = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
+        self.input_text = ft.TextField(
+            hint_text="Escribe tu orden (o /install numpy)...", 
+            expand=True, 
+            border_color="blue400",
+            on_submit=self.send_message
+        )
+        
+        # Build Main Layout
+        self.content = ft.Column(
+            [
+                ft.Text("ATOLLI ZERO ORQUESTADOR", size=30, weight="bold", color="blue200"),
+                ft.Text("Status: ONLINE | Reality Anchor: ACTIVE", size=12, color="green400"),
+                ft.Divider(color="grey800"),
+                ft.Container(
+                    content=self.chat_history,
+                    border=ft.border.all(1, "grey800"),
+                    border_radius=15,
+                    padding=15,
+                    bgcolor="white10", # Safe color
+                    expand=True,
+                ),
+                ft.Row([
+                    self.input_text, 
+                    ft.IconButton(
+                        icon=ft.icons.SEND, 
+                        icon_color="blue400", 
+                        on_click=self.send_message
+                    )
+                ])
+            ],
+            expand=True
+        )
+        
+        # Add initial message
+        self.add_message("Sistemas listos. Orquestador Atolli a la espera.", "agent")
+
+    def add_message(self, text, sender="user"):
+        is_user = (sender == "user")
+        
+        msg_container = ft.Container(
+            content=ft.Text(text, selectable=True, color="white"),
+            padding=10,
+            border_radius=10,
+            bgcolor="blue900" if is_user else "grey800",
+        )
+        
+        row = ft.Row(
+            [msg_container],
+            alignment=ft.MainAxisAlignment.END if is_user else ft.MainAxisAlignment.START
+        )
+        
+        self.chat_history.controls.append(row)
+        self.update()
+        if self.page:
+            self.page.update()
+
+    def send_message(self, e):
+        text = self.input_text.value
+        if not text:
+            return
+            
+        print(f"[DEBUG] Enviando: {text}")
+        self.input_text.value = ""
+        self.input_text.focus()
+        self.add_message(text, "user")
+        
+        # Run agent logic
+        self.page.run_task(self.process_agent, text)
+
+    async def process_agent(self, text):
+        loading = ft.ProgressBar(width=400, color="amber")
+        self.chat_history.controls.append(loading)
+        self.update()
+        if self.page: self.page.update()
+        
+        try:
+            response = self.agent.process_request(text)
+            self.chat_history.controls.remove(loading)
+            self.add_message(response, "agent")
+        except Exception as ex:
+            print(f"[DEBUG] Error: {ex}")
+            if loading in self.chat_history.controls:
+                self.chat_history.controls.remove(loading)
+            self.add_message(f"ERROR: {ex}", "agent")
+            
+        self.update()
+        if self.page: self.page.update()

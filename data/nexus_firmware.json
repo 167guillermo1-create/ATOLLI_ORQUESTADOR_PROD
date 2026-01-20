@@ -1,0 +1,71 @@
+{
+    "version": "1.2.0 (Strict 0.70+)",
+    "last_update": "2026-01-16",
+    "mechanical_rules": {
+        "animations": [
+            {
+                "old": "ft\\.animation\\.Animation",
+                "new": "ft.Animation"
+            }
+        ],
+        "colors": [
+            {
+                "old": "ft\\.colors\\.([A-Z0-9_]+)",
+                "new": "\"%s\""
+            }
+        ],
+        "alignments": {
+            "ft\\.alignment\\.top_left": "ft.Alignment.TOP_LEFT",
+            "ft\\.alignment\\.top_center": "ft.Alignment.TOP_CENTER",
+            "ft\\.alignment\\.top_right": "ft.Alignment.TOP_RIGHT",
+            "ft\\.alignment\\.center_left": "ft.Alignment.CENTER_LEFT",
+            "ft\\.alignment\\.center": "ft.Alignment.CENTER",
+            "ft\\.alignment\\.center_right": "ft.Alignment.CENTER_RIGHT",
+            "ft\\.alignment\\.bottom_left": "ft.Alignment.BOTTOM_LEFT",
+            "ft\\.alignment\\.bottom_center": "ft.Alignment.BOTTOM_CENTER",
+            "ft\\.alignment\\.bottom_right": "ft.Alignment.BOTTOM_RIGHT",
+            "ft\\.alignment\\.TOP_LEFT": "ft.Alignment.TOP_LEFT",
+            "ft\\.alignment\\.BOTTOM_RIGHT": "ft.Alignment.BOTTOM_RIGHT"
+        },
+        "borders": [
+            {
+                "old": "ft\\.border\\.all\\(",
+                "new": "ft.Border.all("
+            }
+        ],
+        "radii": [
+            {
+                "old": "ft\\.border_radius",
+                "new": "ft.BorderRadius"
+            }
+        ],
+        "tabs": [
+            {
+                "old": "ft\\.Tab\\(text=",
+                "new": "ft.Tab(label="
+            }
+        ],
+        "icons": {
+            "pattern": "ft\\.icons\\.([A-Z0-9_]+)",
+            "replacement": "\"%s\""
+        },
+        "icon_control": [
+            {
+                "old": "ft\\.Icon\\(name=",
+                "new": "ft.Icon("
+            }
+        ],
+        "deprecated_controls": [
+            {
+                "old": "ft\\.ElevatedButton",
+                "new": "ft.FilledButton"
+            }
+        ],
+        "text_props": [
+            {
+                "old": "letter_spacing=([0-9.]+)",
+                "new": "style=ft.TextStyle(letter_spacing=\\1)"
+            }
+        ]
+    }
+}

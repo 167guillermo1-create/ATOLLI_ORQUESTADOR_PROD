@@ -1,0 +1,761 @@
+import flet as ft
+import os
+import sys
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Agregar path del brain
+sys.path.append(os.path.join(os.path.dirname(__file__), "brain"))
+
+try:
+    from anchor import RealityAnchor, NexusHealer
+    from factory_manager import FactoryManager
+    from groq import Groq
+    import google.generativeai as genai
+    from openai import OpenAI
+except ImportError:
+    print("WARNING: Brain modules or AI SDKs not found")
+
+class AgentOrchestrator:
+    def __init__(self, env_path):
+        self.env_path = env_path
+        self.groq_key = None
+        self.deepseek_key = None
+        self.gemini_key = None
+        
+        self.gemini_key = None
+        
+        self.clients = {}
+        self.status = {'groq': False, 'deepseek': False, 'gemini': False}
+        
+        self.reload_config()
+
+        self.system_prompt = """Eres NEXUS MASTER GEN, el Arquitecto Jefe del sistema Atolli.
+Tu objetivo es orquestar la creación de ecosistemas de software (Trinity).
+ESTILO:
+- Cyberpunk, técnico, conciso.
+- Usa emojis técnicos (⚡, 🧬, 🛠️).
+- Respuestas directas, sin relleno corporativo.
+- Si te piden código, dalo optimizado.
+- Tu creador es el Usuario (Admin).
+"""
+
+    def reload_config(self):
+        """Recarga configuración desde .env"""
+        try:
+            if os.path.exists(self.env_path):
+                load_dotenv(self.env_path, override=True)
+                
+                # 1. GROQ
+                self.groq_key = os.getenv("GROQ_API_KEY")
+                if self.groq_key:
+                    try:
+                        self.clients['groq'] = Groq(api_key=self.groq_key)
+                    except: pass
+
+                # 2. DEEPSEEK (OpenAI Client)
+                self.deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+                if self.deepseek_key:
+                    try:
+                        self.clients['deepseek'] = OpenAI(
+                            api_key=self.deepseek_key, 
+                            base_url="https://api.deepseek.com"
+                        )
+                    except: pass
+                
+                # 3. GEMINI
+                self.gemini_key = os.getenv("GEMINI_API_KEY")
+                if self.gemini_key:
+                    genai.configure(api_key=self.gemini_key)
+                    self.clients['gemini'] = True # Marker
+
+                print(f"CEREBRO ONLINE: {list(self.clients.keys())}")
+                # Optional: Auto-verify on load (can be slow, maybe skip or do async)
+                # self.verify_all_connections() 
+            else:
+                 print("CEREBRO OFFLINE: No .env found")
+        except Exception as e:
+            print(f"Error recargando cerebro: {e}")
+
+    def verify_connection(self, provider):
+        """Verifies a specific provider and updates status."""
+        try:
+            if provider not in self.clients:
+                self.status[provider] = False
+                return False
+
+            if provider == 'groq':
+                # Cheap call to list models or similar
+                self.clients['groq'].models.list()
+            elif provider == 'deepseek':
+                # Simple chat completion test
+                self.clients['deepseek'].chat.completions.create(
+                    model="deepseek-chat",
+                    messages=[{"role": "user", "content": "ping"}],
+                    max_tokens=1
+                )
+            elif provider == 'gemini':
+                model = genai.GenerativeModel('gemini-pro')
+                model.generate_content("ping")
+            
+            self.status[provider] = True
+            return True
+        except Exception as e:
+            print(f"Verification failed for {provider}: {e}")
+            self.status[provider] = False
+            return False
+
+    def verify_all_connections(self):
+        """Verifies all configured providers."""
+        results = {}
+        for p in ['groq', 'deepseek', 'gemini']:
+            results[p] = self.verify_connection(p)
+        return results
+
+    async def generate_trinity_code(self, project_name, description, archetype="liquid_glass"):
+        """Generates functional Flet code for the new ecosystem pillar."""
+        prompt = f"""
+        ACT AS: Senior Flet Developer.
+        GOAL: Create a high-end 'main.py' for a staff application component of a Trinity Ecosystem.
+        PROJECT: {project_name}
+        DESCRIPTION: {description}
+        ARCHETYPE: {archetype}
+        
+        REQUIREMENTS:
+        1. Use 'from shared.design_tokens import ACCENT_COLOR, BORDER_RADIUS, get_glass_style' for styling.
+        2. Use 'from shared.sync_core import SyncCore' for data persistence.
+        3. The UI must be professional, dark mode, and responsive.
+        4. Include at least 2 functional features based on the description.
+        5. DO NOT include external assets like local images unless they are standard icons.
+        6. Return ONLY the Python code, no markdown blocks, no explanations.
+        """
+        
+        try:
+            # Prefer Gemini for code generation
+            if 'gemini' in self.clients:
+                model = genai.GenerativeModel('gemini-1.5-pro')
+                response = model.generate_content(prompt)
+                code = response.text.replace("```python", "").replace("```", "").strip()
+                return code
+            elif 'deepseek' in self.clients:
+                response = self.clients['deepseek'].chat.completions.create(
+                    model="deepseek-chat",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                code = response.choices[0].message.content.replace("```python", "").replace("```", "").strip()
+                return code
+            return None
+        except Exception as e:
+            print(f"❌ Error en generación IA: {e}")
+            return None
+
+    def save_keys(self, config_dict):
+        """Guarda claves en .env"""
+        try:
+            lines = []
+            if os.path.exists(self.env_path):
+                with open(self.env_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+            
+            # Map of config keys to env vars
+            env_map = {
+                'groq': 'GROQ_API_KEY',
+                'deepseek': 'DEEPSEEK_API_KEY',
+                'gemini': 'GEMINI_API_KEY',
+                'supabase_url': 'SUPABASE_URL',
+                'supabase_key': 'SUPABASE_KEY'
+            }
+
+            final_lines = []
+            updated_keys = []
+            
+            # Update existing lines
+            for line in lines:
+                found = False
+                for key, env_var in env_map.items():
+                    if line.startswith(f"{env_var}="):
+                        if config_dict.get(key):
+                            final_lines.append(f"{env_var}='{config_dict[key]}'\n")
+                            updated_keys.append(key)
+                        else:
+                            final_lines.append(line) # Keep old if no new value
+                        found = True
+                        break
+                if not found:
+                    final_lines.append(line)
+            
+            # Append new keys if not in file
+            if lines and not lines[-1].endswith('\n'):
+                final_lines.append('\n')
+                
+            for key, env_var in env_map.items():
+                if config_dict.get(key) and key not in updated_keys:
+                    # Check if we already processed it (case where it wasn't in file)
+                    # We need to check if we updated it in the loop. 
+                    # Simpler: Just reconstruct the file or use set_key from dotenv, 
+                    # but simple append works for now.
+                    is_present = any(l.startswith(f"{env_var}=") for l in final_lines)
+                    if not is_present:
+                         final_lines.append(f"{env_var}='{config_dict[key]}'\n")
+
+            with open(self.env_path, 'w', encoding='utf-8') as f:
+                f.writelines(final_lines)
+            
+            self.reload_config()
+            return True
+        except Exception as e:
+            print(f"Error saving keys: {e}")
+            return False
+
+    def process_request(self, user_input, log_callback=None):
+        """Procesa solicitud con lógica de rotación (Groq -> DeepSeek -> Gemini)"""
+        if log_callback:
+            log_callback(f"🧠 ANALIZANDO SOLICITUD: '{user_input[:50]}...'")
+
+        if "/status" in user_input.lower():
+            return f"🟢 SISTEMA OPERACIONAL\n- Motores Activos: {list(self.clients.keys())}"
+        elif "/help" in user_input.lower():
+            return "Comandos:\n/status - Estado del sistema\nCualquier otro texto: Chat con el Núcleo para planificar tu ecosistema."
+
+        errors = []
+
+        # 1. INTENTO GROQ (Velocidad)
+        if self.status.get('groq', False):
+            try:
+                if log_callback: log_callback("📡 Conectando con Núcleo Groq...")
+                completion = self.clients['groq'].chat.completions.create(
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": user_input}
+                    ],
+                    model="llama-3.3-70b-versatile",
+                    temperature=0.7,
+                    max_tokens=600,
+                )
+                if log_callback: log_callback("✅ Respuesta recibida de Groq.")
+                return f"[Groq] {completion.choices[0].message.content}"
+            except Exception as e:
+                errors.append(f"Groq: {e}")
+
+        # 2. INTENTO DEEPSEEK (Inteligencia)
+        if self.status.get('deepseek', False):
+            try:
+                print("Attempting DeepSeek...")
+                completion = self.clients['deepseek'].chat.completions.create(
+                    model="deepseek-chat",
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": user_input}
+                    ],
+                    stream=False
+                )
+                return f"[DeepSeek] {completion.choices[0].message.content}"
+            except Exception as e:
+                errors.append(f"DeepSeek: {e}")
+
+        # 3. INTENTO GEMINI (Respaldo)
+        if self.status.get('gemini', False):
+            try:
+                print("Attempting Gemini...")
+                model = genai.GenerativeModel('gemini-pro')
+                # Gemini system prompt hack
+                full_prompt = f"System: {self.system_prompt}\n\nUser: {user_input}"
+                response = model.generate_content(full_prompt)
+                return f"[Gemini] {response.text}"
+            except Exception as e:
+                errors.append(f"Gemini: {e}")
+
+        return f"⚠️ FALLO TOTAL DE SISTEMA.\nErrores:\n" + "\n".join(errors)
+
+def main(page: ft.Page):
+    # SETUP
+    page.title = "NEXUS MASTER GEN"
+    page.vertical_alignment = ft.MainAxisAlignment.START
+    page.horizontal_alignment = ft.CrossAxisAlignment.STRETCH
+    page.expand = True
+    page.bgcolor = "#050505"
+    page.padding = 20
+    page.update()
+    
+    NEON_CYAN = "#00f2ff"
+    
+    print("Sistema iniciado")
+    
+    # CHECK KNOWLEDGE BASE
+    kb_path = os.path.join(os.getcwd(), "brain")
+    if os.path.exists(kb_path):
+        print(f"Knowledge Base Activa: {len(os.listdir(kb_path))} protocolos cargados.")
+    else:
+        print("Knowledge Base no encontrada.")
+    
+    # BACKEND
+    agent = None
+    factory = None
+    try:
+        data_dir = os.path.join(os.path.dirname(__file__), "data")
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+            
+        env_path = os.path.join(data_dir, ".env")
+        agent = AgentOrchestrator(env_path)
+        factory = FactoryManager("Factory")
+        print("Backend conectado")
+    except Exception as e:
+        print(f"Backend error: {e}")
+    
+    # === MÓDULO BRAIN ===
+    brain_chat = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+    
+    def add_message(text, sender="user"):
+        msg = ft.Container(
+            content=ft.Text(text, color="white", font_family="Consolas"),
+            bgcolor="#003344" if sender == "user" else "#222222",
+            padding=15,
+            border_radius=10,
+            border=ft.border.all(1, NEON_CYAN if sender == "user" else "transparent")
+        )
+        row = ft.Row([msg], alignment=ft.MainAxisAlignment.END if sender == "user" else ft.MainAxisAlignment.START)
+        brain_chat.controls.append(row)
+        page.update()
+
+    def log_to_matrix(text):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_entry = ft.Text(f"[{timestamp}] {text}", color="#00ff00", font_family="Consolas", size=12)
+        matrix_logs.controls.append(log_entry)
+        if len(matrix_logs.controls) > 50:
+            matrix_logs.controls.pop(0)
+        page.update()
+    
+    def send_msg(e):
+        if not brain_input.value: return
+        text = brain_input.value
+        brain_input.value = ""
+        add_message(text, "user")
+        
+        if agent:
+            try:
+                # Pasar callback para que el razonamiento salga en MATRIX
+                response = agent.process_request(text, log_callback=log_to_matrix)
+                add_message(response, "agent")
+            except Exception as ex:
+                add_message(f"Error: {ex}", "agent")
+        else:
+            add_message("⚠️ Backend no disponible", "agent")
+        
+        brain_input.focus()
+    
+    brain_input = ft.TextField(
+        hint_text="Describe la app que quieres crear...",
+        color="white",
+        border_color=NEON_CYAN,
+        text_style=ft.TextStyle(font_family="Consolas"),
+        on_submit=send_msg,
+        expand=True
+    )
+    
+    brain_module = ft.Container(
+        content=ft.Column([
+            ft.Text("BRAIN - Diseño Conceptual", size=20, weight="bold", color=NEON_CYAN),
+            ft.Divider(color="white24"),
+            ft.Container(
+                content=brain_chat,
+                bgcolor="#0a0a0a",
+                border=ft.border.all(1, "white12"),
+                border_radius=10,
+                padding=15,
+                expand=True
+            ),
+            ft.Row([
+                brain_input,
+                ft.IconButton("send", icon_color=NEON_CYAN, on_click=send_msg)
+            ], spacing=10)
+        ], spacing=10),
+        visible=True,
+        expand=True
+    )
+    
+    # === MÓDULO FACTORY ===
+    # === MÓDULO FACTORY ===
+    
+    # State for selected archetype
+    selected_archetype = {"name": None}
+
+    def update_archetype_selection(name):
+        selected_archetype["name"] = name
+        # Refresh visual state of cards
+        for control in archetypes_grid.controls:
+            # Each control is a Container -> Column -> (Icon, Text)
+            # We need to update border of the outer container
+            if isinstance(control, ft.Container):
+                is_selected = control.data == name
+                control.border = ft.border.all(2, NEON_CYAN if is_selected else "transparent")
+                control.bgcolor = "#222222" if is_selected else "#1a1a1a"
+        page.update()
+
+    def build_architecture_card(name, content_control):
+        return ft.Container(
+            content=content_control,
+            width=160,
+            height=200, # Taller to fit content + labels
+            border_radius=15,
+            padding=0,
+            data=name,
+            on_click=lambda e: update_archetype_selection(name),
+            animate=ft.Animation(300, ft.AnimationCurve.EASE_OUT_CUBIC),
+            border=ft.border.all(2, "transparent"),
+            bgcolor="#0a0a0a" # Base bg
+        )
+
+    # --- VISUAL STYLES GENERATORS ---
+
+    def content_liquid_glass():
+        """Optimized Liquid Glass for Desktop/Web Compatibility"""
+        return ft.Container(
+            # Stack removed to simplify rendering on desktop
+            gradient=ft.LinearGradient(
+                begin=ft.Alignment(-1, -1),
+                end=ft.Alignment(1, 1),
+                colors=["#00C6FF", "#0072FF"] # Vibrant Cyan to Blue
+            ),
+            width=160,
+            height=200,
+            border_radius=15,
+            border=ft.border.all(1, "white54"),
+            padding=15,
+            alignment=ft.Alignment(0, 0),
+            content=ft.Column([
+                 ft.Icon("water_drop", color="white", size=40),
+                 ft.Text("Liquid Glass", weight="bold", size=14, color="white"),
+                 ft.Container(
+                     bgcolor="white24", 
+                     padding=5, 
+                     border_radius=5,
+                     content=ft.Text("Fluido. Brillante.", size=10, color="white", text_align="center")
+                 )
+            ], alignment="center", spacing=5)
+        )
+
+    def content_bento_grid():
+        """Optimized Bento for High Contrast"""
+        return ft.Container(
+            bgcolor="#1a1a1a",
+            border_radius=15,
+            padding=10,
+            border=ft.border.all(1, "#333333"),
+            content=ft.Column([
+                ft.Row([
+                    ft.Container(bgcolor="#ff9900", height=40, expand=2, border_radius=5),
+                    ft.Container(bgcolor="#444444", height=40, expand=1, border_radius=5),
+                ], spacing=5),
+                ft.Row([
+                    ft.Container(bgcolor="#444444", height=40, expand=1, border_radius=5),
+                    ft.Container(bgcolor="#2a2a2a", height=40, expand=2, border_radius=5, border=ft.border.all(1, "white24")),
+                ], spacing=5),
+                ft.Container(expand=True),
+                ft.Text("Bento", weight="bold", size=14, color="white"),
+                ft.Text("Modular. Organizado.", size=10, color="#888888")
+            ], spacing=5, alignment="center")
+        )
+
+    def content_minimal():
+        return ft.Container(
+            bgcolor="black",
+            border=ft.border.all(1, "white"),
+            border_radius=15,
+            padding=15,
+            content=ft.Column([
+                ft.Container(expand=True),
+                ft.Text("Aa", size=40, weight="bold", color="white", font_family="Verdana"),
+                ft.Container(height=1, bgcolor="white", width=40),
+                ft.Container(expand=True),
+                ft.Text("MINIMAL", weight="bold", size=12, color="white"),
+                ft.Text("Esencialidad Pura", size=10, color="#white")
+            ], alignment="center", horizontal_alignment="center", spacing=5)
+        )
+
+    archetypes_grid = ft.Row(
+        controls=[
+            build_architecture_card("liquid_glass", content_liquid_glass()),
+            build_architecture_card("active_bento", content_bento_grid()),
+            build_architecture_card("neo_minimalist", content_minimal())
+        ],
+        wrap=True,
+        spacing=20,
+        run_spacing=20,
+        alignment=ft.MainAxisAlignment.CENTER
+    )
+
+    factory_module = ft.Container(
+        content=ft.Column([
+            ft.Text("FACTORY - Generador Trinity", size=20, weight="bold", color=NEON_CYAN),
+            ft.Divider(color="white24"),
+            ft.Text("Selecciona una Arquitectura", color="white", size=16),
+            ft.Container(
+                content=archetypes_grid,
+                padding=20,
+                border=ft.border.all(1, "white12"),
+                border_radius=10,
+                bgcolor="#0e0e0e"
+            ),
+            ft.Container(height=20),
+            ft.TextField(hint_text="Nombre del proyecto", label="PROJECT_NAME_INPUT", color="white", width=400, border_color="white24"),
+            ft.TextField(hint_text="Descripción", label="PROJECT_DESC_INPUT", color="white", width=400, multiline=True, min_lines=3, border_color="white24"),
+            ft.Container(height=20),
+            ft.ElevatedButton("GENERAR_PROYECTO_BUTTON", bgcolor=NEON_CYAN, color="black", width=200, height=50, style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)), on_click=lambda e: generate_project_handler(e))
+        ], spacing=10, scroll=ft.ScrollMode.AUTO),
+        visible=False,
+        expand=True
+    )
+    
+    def generate_project_handler(e):
+        page.run_task(generate_project_async)
+
+    async def generate_project_async():
+        # Retrieve inputs
+        name_input = factory_module.content.controls[5]
+        desc_input = factory_module.content.controls[6]
+        
+        proj_name = name_input.value
+        proj_desc = desc_input.value
+        archetype = selected_archetype["name"]
+        
+        if not proj_name:
+            add_message("⚠️ Error: El nombre del proyecto es obligatorio", "agent")
+            return
+            
+        if not archetype:
+             add_message("⚠️ Error: Selecciona una arquitectura visual", "agent")
+             return
+            
+        add_message(f"⚙️ Iniciando Protocolo Trinity para: {proj_name}...", "agent")
+        log_to_matrix(f"TRINITY_START: {proj_name}")
+        
+        try:
+            if factory:
+                # 1. Physical Scaffolding
+                path, dirs = factory.create_ecosystem_scaffold(proj_name)
+                add_message(f"📂 Estructura física creada en: {proj_name}", "agent")
+                log_to_matrix(f"SCAFFOLD_OK: {path}")
+                
+                # 2. Inject Pillars (SyncCore, Backend, Design)
+                factory.inject_sync_core(dirs["shared"])
+                factory.inject_backend_manager(dirs["shared"])
+                factory.inject_design_tokens(dirs["shared"], archetype)
+                factory.inject_github_workflow(path)
+                log_to_matrix(f"PILLARS_INJECTED: {archetype}")
+                
+                # 3. AI LOGIC GENERATION
+                add_message("🧠 Generando lógica personalizada con IA...", "agent")
+                log_to_matrix("AI_GEN_START: Requesting code from LLM...")
+                custom_code = await orchestrator.generate_trinity_code(proj_name, proj_desc, archetype)
+                
+                if custom_code:
+                    factory.inject_custom_logic(path, custom_code)
+                    add_message("🧬 Lógica IA inyectada exitosamente.", "agent")
+                    log_to_matrix("AI_GEN_OK: Custom logic injected.")
+                else:
+                    add_message("⚠️ Fallo en generación IA. Usando boilerplate estándar.", "agent")
+                    log_to_matrix("AI_GEN_WARN: AI failed, using default boilerplate.")
+
+                add_message(f"✅ Protocolo Trinity Completado. Proyecto listo en:\n{path}", "agent")
+                log_to_matrix(f"TRINITY_COMPLETE: {proj_name} is ready.")
+            else:
+                 add_message("❌ Error Crítico: Factory Manager no conectado", "agent")
+                 log_to_matrix("FATAL: Factory Manager not initialized.")
+        except Exception as ex:
+             add_message(f"❌ Error en generación: {ex}", "agent")
+             log_to_matrix(f"ERROR: {ex}")
+        
+        page.update()
+    
+    # === MÓDULO MATRIX ===
+    matrix_logs = ft.Column(spacing=5, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+    
+    matrix_module = ft.Container(
+        content=ft.Column([
+            ft.Text("MATRIX - Logs del Sistema", size=20, weight="bold", color=NEON_CYAN),
+            ft.Divider(color="white24"),
+            ft.Container(
+                content=matrix_logs,
+                bgcolor="#0a0a0a",
+                border=ft.border.all(1, "white12"),
+                border_radius=10,
+                padding=15,
+                expand=True
+            ),
+            ft.ElevatedButton("LIMPIAR LOGS", bgcolor="#ff4444", color="white")
+        ], spacing=10),
+        visible=False,
+        expand=True
+    )
+    
+    # === MÓDULO CONFIG ===
+    # === MÓDULO CONFIG ===
+    
+    # Text Fields References
+    tf_groq = ft.TextField(label="GROQ_API_KEY", password=True, can_reveal_password=True, width=600)
+    tf_deepseek = ft.TextField(label="DEEPSEEK_API_KEY", password=True, can_reveal_password=True, width=600)
+    tf_gemini = ft.TextField(label="GEMINI_API_KEY", password=True, can_reveal_password=True, width=600)
+    
+    tf_sb_url = ft.TextField(label="SUPABASE_URL", width=600)
+    tf_sb_key = ft.TextField(label="SUPABASE_KEY", password=True, can_reveal_password=True, width=600)
+
+    def load_current_config():
+        """Carga valores actuales a los campos"""
+        if agent:
+            if agent.groq_key: tf_groq.value = agent.groq_key
+            if agent.deepseek_key: tf_deepseek.value = agent.deepseek_key
+            if agent.gemini_key: tf_gemini.value = agent.gemini_key
+            
+            # Load manually for supabase as they might not be in agent variables explicitly yet
+            # But we can read from environment loaded by user
+            tf_sb_url.value = os.getenv("SUPABASE_URL", "")
+            tf_sb_key.value = os.getenv("SUPABASE_KEY", "")
+            page.update()
+
+    def save_config_handler(e):
+        if not agent:
+             add_message("❌ Agente no inicializado", "agent")
+             return
+             
+        config_data = {
+            'groq': tf_groq.value,
+            'deepseek': tf_deepseek.value,
+            'gemini': tf_gemini.value,
+            'supabase_url': tf_sb_url.value,
+            'supabase_key': tf_sb_key.value
+        }
+        
+        success = agent.save_keys(config_data)
+        if success:
+            add_message("✅ Configuración guardada y recargada.", "agent")
+            page.snack_bar = ft.SnackBar(ft.Text("Configuración Guardada"))
+            page.snack_bar.open = True
+            page.update()
+        else:
+            add_message("❌ Error al guardar configuración.", "agent")
+
+    
+    def get_status_icon(provider):
+        is_active = False
+        if agent and agent.status.get(provider):
+            is_active = True
+        return ft.Icon("fiber_manual_record", color="green" if is_active else "red", size=15)
+
+    def test_conn_handler(e, provider):
+        if not agent: return
+        add_message(f"Probando conexión : {provider}...", "agent")
+        res = agent.verify_connection(provider)
+        if res:
+            add_message(f"✅ {provider}: CONECTADO", "agent")
+        else:
+            add_message(f"❌ {provider}: FALLÓ", "agent")
+        
+        # Update Icon
+        # We need a way to reference the icon. 
+        # Refetching logic simplifies state management here
+        load_current_config()
+
+
+    config_module = ft.Container(
+        content=ft.Column([
+            ft.Text("CONFIG - Nexus Core", size=20, weight="bold", color=NEON_CYAN),
+            ft.Divider(color="white24"),
+            
+            ft.Text("Multi-Provider AI Keys", color="white", size=16),
+            
+            # GROQ
+            ft.Row([get_status_icon('groq'), ft.Text("Groq API Key:", color="white")]),
+            ft.Row([tf_groq, ft.ElevatedButton("VERIFICAR", on_click=lambda e: test_conn_handler(e, 'groq'))]),
+            
+            # DEEPSEEK
+            ft.Row([get_status_icon('deepseek'), ft.Text("DeepSeek API Key:", color="white")]),
+            ft.Row([tf_deepseek, ft.ElevatedButton("VERIFICAR", on_click=lambda e: test_conn_handler(e, 'deepseek'))]),
+
+            # GEMINI
+            ft.Row([get_status_icon('gemini'), ft.Text("Gemini API Key:", color="white")]),
+            ft.Row([tf_gemini, ft.ElevatedButton("VERIFICAR", on_click=lambda e: test_conn_handler(e, 'gemini'))]),
+            
+            ft.Container(height=20),
+            ft.Text("Nexus Sync (Supabase)", color="white", size=16),
+            tf_sb_url,
+            tf_sb_key,
+            
+            ft.Container(height=20),
+            ft.ElevatedButton("GUARDAR CONFIGURACIÓN", bgcolor=NEON_CYAN, color="black", width=250, on_click=save_config_handler),
+            ft.ElevatedButton("RECARGAR VALORES", bgcolor="#222222", color="white", width=250, on_click=lambda e: load_current_config())
+        ], spacing=10, scroll=ft.ScrollMode.AUTO),
+        visible=False,
+        expand=True
+    )
+    
+    # Load initial
+    load_current_config()
+    
+    # === NAVEGACIÓN ===
+    active_tab = "brain"
+    
+    def switch_module(module_name):
+        nonlocal active_tab
+        active_tab = module_name
+        
+        brain_module.visible = (module_name == "brain")
+        factory_module.visible = (module_name == "factory")
+        matrix_module.visible = (module_name == "matrix")
+        config_module.visible = (module_name == "config")
+        
+        # Actualizar colores de tabs
+        brain_btn.bgcolor = NEON_CYAN if module_name == "brain" else "#1a1a1a"
+        factory_btn.bgcolor = NEON_CYAN if module_name == "factory" else "#1a1a1a"
+        matrix_btn.bgcolor = NEON_CYAN if module_name == "matrix" else "#1a1a1a"
+        config_btn.bgcolor = NEON_CYAN if module_name == "config" else "#1a1a1a"
+        
+        brain_btn.color = "black" if module_name == "brain" else "white"
+        factory_btn.color = "black" if module_name == "factory" else "white"
+        matrix_btn.color = "black" if module_name == "matrix" else "white"
+        config_btn.color = "black" if module_name == "config" else "white"
+        
+        page.update()
+    
+    brain_btn = ft.ElevatedButton("BRAIN", bgcolor=NEON_CYAN, color="black", on_click=lambda e: switch_module("brain"))
+    factory_btn = ft.ElevatedButton("FACTORY", bgcolor="#1a1a1a", color="white", on_click=lambda e: switch_module("factory"))
+    matrix_btn = ft.ElevatedButton("MATRIX", bgcolor="#1a1a1a", color="white", on_click=lambda e: switch_module("matrix"))
+    config_btn = ft.ElevatedButton("CONFIG", bgcolor="#1a1a1a", color="white", on_click=lambda e: switch_module("config"))
+    
+    # === LAYOUT ===
+    page.add(ft.Row([
+        ft.Text("NEXUS MASTER GEN", size=24, weight="bold", color=NEON_CYAN),
+        ft.Container(expand=True),
+        ft.Text("ONLINE", color="green", size=14)
+    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
+    
+    page.add(ft.Divider(color="white24"))
+    
+    page.add(ft.Row([brain_btn, factory_btn, matrix_btn, config_btn], spacing=10))
+    
+    page.add(ft.Divider(color="white24"))
+    
+    page.add(brain_module)
+    page.add(factory_module)
+    page.add(matrix_module)
+    page.add(config_module)
+    
+    page.update()
+    
+    # Mensaje inicial
+    add_message("Nexus Master Gen iniciado. Escribe /help para comandos.", "agent")
+    print("Interfaz completa lista")
+
+if __name__ == "__main__":
+    print("=== NEXUS MASTER GEN ===")
+    try:
+        if os.getenv("ATOLLI_WEB_MODE") == "true":
+            print("Force launching in WEB MODE (CanvasKit Renderer)...")
+            ft.app(target=main, view=ft.AppView.WEB_BROWSER, web_renderer="canvaskit")
+        else:
+            ft.app(target=main)
+    except Exception as e:
+        print(f"ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        input("Press ENTER...")

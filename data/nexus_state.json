@@ -1,0 +1,32 @@
+{
+    "evolution_level": 1,
+    "experience_points": 66,
+    "personality_traits": {
+        "efficiency": 0.5,
+        "creativity": 0.51
+    },
+    "objective_history": [
+        "Crear proyecto full stack 'Nex..."
+    ],
+    "achievements": [],
+    "title": "Iniciado",
+    "leveled_up": false,
+    "usage_stats": {
+        "tokens_total": 1093,
+        "cost_usd": 0.0007651,
+        "providers": {
+            "groq": {
+                "tokens": 1093,
+                "cost": 0.0007651
+            },
+            "deepseek": {
+                "tokens": 0,
+                "cost": 0.0
+            },
+            "gemini": {
+                "tokens": 0,
+                "cost": 0.0
+            }
+        }
+    }
+}

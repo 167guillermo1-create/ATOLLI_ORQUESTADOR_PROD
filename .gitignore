@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# Flet / Flutter
+build/
+dist/
+*.exe
+*.apk
+app.zip
+
+# Nexus Specific
+Factory/
+backups/
+bitacoras/
+*.log
+*.txt
+*.batch
+RESTAURAR_SISTEMA.bat
+INICIAR_SISTEMA.bat
+
+# IDEs
+.vscode/
+.idea/
+.gemini/
+brain/nexus_state.json
