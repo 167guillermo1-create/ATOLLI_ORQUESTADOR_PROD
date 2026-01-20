@@ -1,0 +1,8 @@
+flet==0.80.2
+supabase
+python-dotenv
+groq
+google-generativeai
+openai
+requests
+pillow
