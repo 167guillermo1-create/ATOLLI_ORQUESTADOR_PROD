@@ -31,7 +31,7 @@ jobs:
 
       - name: Build APK
         run: |
-          flet build apk --project "Nexus Master Gen" --description "AI Orchestrator by Atolli" --no-rich-output
+          flet build apk --project "Nexus Master Gen" --description "AI Orchestrator by Atolli" --no-rich-output --yes
         env:
           FLET_WEB_RENDERER: canvaskit
 
